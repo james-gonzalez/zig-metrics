@@ -16,25 +16,22 @@ pub const Collector = struct {
 
     /// Returns an allocated Prometheus text-format response body.
     /// Caller owns the memory.
-    pub fn collect(self: *Collector) ![]const u8 {
-        // Use a heap-allocated buffer to avoid large stack frames.
-        const max_size = 256 * 1024;
-        const heap_buf = try self.allocator.alloc(u8, max_size);
+    pub fn collect(self: *Collector, io: std.Io) ![]const u8 {
+        const heap_buf = try self.allocator.alloc(u8, 256 * 1024);
         defer self.allocator.free(heap_buf);
 
-        var fbs = std.io.fixedBufferStream(heap_buf);
-        const w = fbs.writer();
+        var w = std.Io.Writer.fixed(heap_buf);
 
-        try self.writeCpu(w);
-        try self.writeMemory(w);
-        try self.writeNetwork(w);
-        try self.writeDisk(w);
+        try self.writeCpu(io, &w);
+        try self.writeMemory(io, &w);
+        try self.writeNetwork(io, &w);
+        try self.writeDisk(io, &w);
 
-        return self.allocator.dupe(u8, fbs.getWritten());
+        return self.allocator.dupe(u8, heap_buf[0..w.end]);
     }
 
-    fn writeCpu(self: *Collector, w: anytype) !void {
-        const current = cpu.read(self.allocator) catch |err| {
+    fn writeCpu(self: *Collector, io: std.Io, w: *std.Io.Writer) !void {
+        const current = cpu.read(self.allocator, io) catch |err| {
             std.log.warn("cpu read failed: {}", .{err});
             return;
         };
@@ -56,8 +53,8 @@ pub const Collector = struct {
         try w.print("system_cpu_usage_percent {d:.2}\n\n", .{usage_percent});
     }
 
-    fn writeMemory(self: *Collector, w: anytype) !void {
-        const stats = memory.read(self.allocator) catch |err| {
+    fn writeMemory(self: *Collector, io: std.Io, w: *std.Io.Writer) !void {
+        const stats = memory.read(self.allocator, io) catch |err| {
             std.log.warn("memory read failed: {}", .{err});
             return;
         };
@@ -79,8 +76,8 @@ pub const Collector = struct {
         try w.print("system_memory_used_bytes {d}\n\n", .{stats.total_bytes -| stats.free_bytes});
     }
 
-    fn writeNetwork(self: *Collector, w: anytype) !void {
-        const stats = network.read(self.allocator) catch |err| {
+    fn writeNetwork(self: *Collector, io: std.Io, w: *std.Io.Writer) !void {
+        const stats = network.read(self.allocator, io) catch |err| {
             std.log.warn("network read failed: {}", .{err});
             return;
         };
@@ -103,8 +100,8 @@ pub const Collector = struct {
         for (stats) |s| try w.print("system_network_transmit_packets_total{{interface=\"{s}\"}} {d}\n\n", .{ s.interface, s.tx_packets });
     }
 
-    fn writeDisk(self: *Collector, w: anytype) !void {
-        const stats = disk.read(self.allocator) catch |err| {
+    fn writeDisk(self: *Collector, io: std.Io, w: *std.Io.Writer) !void {
+        const stats = disk.read(self.allocator, io) catch |err| {
             std.log.warn("disk read failed: {}", .{err});
             return;
         };

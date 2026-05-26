@@ -14,11 +14,13 @@ pub const NetStats = struct {
 
 /// Reads per-interface network stats from /proc/net/dev.
 /// Caller owns the returned slice; free with network.free().
-pub fn read(allocator: std.mem.Allocator) ![]NetStats {
-    const file = try std.fs.openFileAbsolute("/proc/net/dev", .{});
-    defer file.close();
+pub fn read(allocator: std.mem.Allocator, io: std.Io) ![]NetStats {
+    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/net/dev", .{});
+    defer file.close(io);
 
-    const content = try file.readToEndAlloc(allocator, 64 * 1024);
+    var file_buf: [64 * 1024]u8 = undefined;
+    var file_reader = file.reader(io, &file_buf);
+    const content = try file_reader.interface.allocRemaining(allocator, .unlimited);
     defer allocator.free(content);
 
     var interfaces: std.ArrayList(NetStats) = .empty;

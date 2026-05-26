@@ -21,11 +21,13 @@ pub const CpuStats = struct {
 };
 
 /// Reads aggregate CPU stats from /proc/stat.
-pub fn read(allocator: std.mem.Allocator) !CpuStats {
-    const file = try std.fs.openFileAbsolute("/proc/stat", .{});
-    defer file.close();
+pub fn read(allocator: std.mem.Allocator, io: std.Io) !CpuStats {
+    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/stat", .{});
+    defer file.close(io);
 
-    const content = try file.readToEndAlloc(allocator, 64 * 1024);
+    var file_buf: [64 * 1024]u8 = undefined;
+    var file_reader = file.reader(io, &file_buf);
+    const content = try file_reader.interface.allocRemaining(allocator, .unlimited);
     defer allocator.free(content);
 
     var lines = std.mem.splitScalar(u8, content, '\n');

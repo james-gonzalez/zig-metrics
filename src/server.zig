@@ -1,10 +1,14 @@
 const std = @import("std");
+const net = std.Io.net;
 const Collector = @import("metrics/collector.zig").Collector;
 
-pub fn run(allocator: std.mem.Allocator, port: u16) !void {
-    const address = try std.net.Address.parseIp("0.0.0.0", port);
-    var net_server = try address.listen(.{ .reuse_address = true });
-    defer net_server.deinit();
+pub fn run(allocator: std.mem.Allocator, io: std.Io, port: u16) !void {
+    var addr_buf: [22]u8 = undefined;
+    const addr_str = try std.fmt.bufPrint(&addr_buf, "0.0.0.0:{d}", .{port});
+    const address = try net.IpAddress.parseLiteral(addr_str);
+
+    var tcp_server = try address.listen(io, .{ .reuse_address = true });
+    defer tcp_server.deinit(io);
 
     std.log.info("Listening on 0.0.0.0:{d} — /metrics /health", .{port});
 
@@ -12,11 +16,11 @@ pub fn run(allocator: std.mem.Allocator, port: u16) !void {
     defer collector.deinit();
 
     while (true) {
-        const connection = net_server.accept() catch |err| {
+        const stream = tcp_server.accept(io) catch |err| {
             std.log.err("accept failed: {}", .{err});
             continue;
         };
-        handleConnection(allocator, connection, &collector) catch |err| {
+        handleConnection(allocator, io, stream, &collector) catch |err| {
             std.log.err("connection error: {}", .{err});
         };
     }
@@ -24,42 +28,34 @@ pub fn run(allocator: std.mem.Allocator, port: u16) !void {
 
 fn handleConnection(
     allocator: std.mem.Allocator,
-    connection: std.net.Server.Connection,
+    io: std.Io,
+    stream: net.Stream,
     collector: *Collector,
 ) !void {
-    defer connection.stream.close();
+    defer stream.close(io);
 
-    var req_buf: [4096]u8 = undefined;
-    const n = try connection.stream.read(&req_buf);
-    if (n == 0) return;
+    var recv_buf: [4096]u8 = undefined;
+    var send_buf: [4096]u8 = undefined;
+    var conn_reader = stream.reader(io, &recv_buf);
+    var conn_writer = stream.writer(io, &send_buf);
 
-    const request = req_buf[0..n];
-    const line_end = std.mem.indexOfScalar(u8, request, '\n') orelse request.len;
-    const first_line = request[0..line_end];
+    var http_server: std.http.Server = .init(&conn_reader.interface, &conn_writer.interface);
+    var request = http_server.receiveHead() catch |err| {
+        std.log.warn("receiveHead failed: {}", .{err});
+        return;
+    };
 
-    if (std.mem.indexOf(u8, first_line, "GET /metrics") != null) {
-        const body = try collector.collect();
+    if (std.mem.eql(u8, request.head.target, "/metrics")) {
+        const body = try collector.collect(io);
         defer allocator.free(body);
-
-        const header = try std.fmt.allocPrint(
-            allocator,
-            "HTTP/1.1 200 OK\r\n" ++
-                "Content-Type: text/plain; version=0.0.4; charset=utf-8\r\n" ++
-                "Content-Length: {d}\r\n" ++
-                "\r\n",
-            .{body.len},
-        );
-        defer allocator.free(header);
-
-        try connection.stream.writeAll(header);
-        try connection.stream.writeAll(body);
-    } else if (std.mem.indexOf(u8, first_line, "GET /health") != null) {
-        try connection.stream.writeAll(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 3\r\n\r\nOK\n",
-        );
+        try request.respond(body, .{
+            .extra_headers = &.{
+                .{ .name = "content-type", .value = "text/plain; version=0.0.4; charset=utf-8" },
+            },
+        });
+    } else if (std.mem.startsWith(u8, request.head.target, "/health")) {
+        try request.respond("OK\n", .{});
     } else {
-        try connection.stream.writeAll(
-            "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n",
-        );
+        try request.respond("Not Found", .{ .status = .not_found });
     }
 }

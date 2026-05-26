@@ -9,11 +9,13 @@ pub const MemStats = struct {
 };
 
 /// Reads memory stats from /proc/meminfo.
-pub fn read(allocator: std.mem.Allocator) !MemStats {
-    const file = try std.fs.openFileAbsolute("/proc/meminfo", .{});
-    defer file.close();
+pub fn read(allocator: std.mem.Allocator, io: std.Io) !MemStats {
+    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/meminfo", .{});
+    defer file.close(io);
 
-    const content = try file.readToEndAlloc(allocator, 64 * 1024);
+    var file_buf: [64 * 1024]u8 = undefined;
+    var file_reader = file.reader(io, &file_buf);
+    const content = try file_reader.interface.allocRemaining(allocator, .unlimited);
     defer allocator.free(content);
 
     var stats = MemStats{
