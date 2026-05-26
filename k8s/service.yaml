@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: zig-metrics
+  labels:
+    app: zig-metrics
+spec:
+  selector:
+    app: zig-metrics
+  ports:
+    - name: metrics
+      port: 9090
+      targetPort: 9090
+      protocol: TCP
+  type: ClusterIP

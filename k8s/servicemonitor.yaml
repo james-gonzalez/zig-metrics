@@ -1,0 +1,15 @@
+# Requires the Prometheus Operator (kube-prometheus-stack) to be installed.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: zig-metrics
+  labels:
+    app: zig-metrics
+spec:
+  selector:
+    matchLabels:
+      app: zig-metrics
+  endpoints:
+    - port: metrics
+      path: /metrics
+      interval: 15s

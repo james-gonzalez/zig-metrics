@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zig-metrics
+  labels:
+    app: zig-metrics
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zig-metrics
+  template:
+    metadata:
+      labels:
+        app: zig-metrics
+      annotations:
+        # Used by Prometheus when ServiceMonitor is not available
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9090"
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: zig-metrics
+          # Replace OWNER with your GitHub username / org
+          image: ghcr.io/OWNER/zig-playground:latest
+          imagePullPolicy: Always
+          ports:
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            limits:
+              cpu: 100m
+              memory: 64Mi
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            initialDelaySeconds: 5
+            periodSeconds: 10
+      # Uncomment to mount host /proc for host-level metrics (requires privileged node)
+      # volumes:
+      #   - name: host-proc
+      #     hostPath:
+      #       path: /proc
+      #       type: Directory
