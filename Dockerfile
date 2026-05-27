@@ -16,10 +16,10 @@ RUN set -ex; \
         linux/arm64) ZIG_ARCH="aarch64" ;; \
         *) echo "Unsupported BUILDPLATFORM: ${BUILDPLATFORM}" && exit 1 ;; \
     esac; \
-    wget -q "https://ziglang.org/download/${ZIG_VERSION}/zig-linux-${ZIG_ARCH}-${ZIG_VERSION}.tar.xz" \
+    wget -q "https://ziglang.org/download/${ZIG_VERSION}/zig-${ZIG_ARCH}-linux-${ZIG_VERSION}.tar.xz" \
          -O /tmp/zig.tar.xz; \
     tar -xf /tmp/zig.tar.xz -C /usr/local; \
-    mv /usr/local/zig-linux-${ZIG_ARCH}-${ZIG_VERSION} /usr/local/zig; \
+    mv /usr/local/zig-${ZIG_ARCH}-linux-${ZIG_VERSION} /usr/local/zig; \
     rm /tmp/zig.tar.xz
 
 ENV PATH="/usr/local/zig:$PATH"
