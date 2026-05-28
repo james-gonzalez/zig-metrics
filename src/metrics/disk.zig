@@ -1,4 +1,5 @@
 const std = @import("std");
+const procfs = @import("procfs.zig");
 
 pub const DiskStats = struct {
     device: []const u8,
@@ -19,12 +20,7 @@ pub const DiskStats = struct {
 /// Reads per-device disk stats from /proc/diskstats.
 /// Caller owns the returned slice; free with disk.free().
 pub fn read(allocator: std.mem.Allocator, io: std.Io) ![]DiskStats {
-    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/diskstats", .{});
-    defer file.close(io);
-
-    var file_buf: [64 * 1024]u8 = undefined;
-    var file_reader = file.reader(io, &file_buf);
-    const content = try file_reader.interface.allocRemaining(allocator, .unlimited);
+    const content = try procfs.readFile(allocator, io, "/proc/diskstats");
     defer allocator.free(content);
 
     var disks: std.ArrayList(DiskStats) = .empty;

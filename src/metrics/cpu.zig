@@ -1,4 +1,5 @@
 const std = @import("std");
+const procfs = @import("procfs.zig");
 
 pub const CpuStats = struct {
     user: u64,
@@ -22,12 +23,7 @@ pub const CpuStats = struct {
 
 /// Reads aggregate CPU stats from /proc/stat.
 pub fn read(allocator: std.mem.Allocator, io: std.Io) !CpuStats {
-    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/stat", .{});
-    defer file.close(io);
-
-    var file_buf: [64 * 1024]u8 = undefined;
-    var file_reader = file.reader(io, &file_buf);
-    const content = try file_reader.interface.allocRemaining(allocator, .unlimited);
+    const content = try procfs.readFile(allocator, io, "/proc/stat");
     defer allocator.free(content);
 
     var lines = std.mem.splitScalar(u8, content, '\n');

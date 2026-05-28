@@ -1,4 +1,5 @@
 const std = @import("std");
+const procfs = @import("procfs.zig");
 
 pub const MemStats = struct {
     total_bytes: u64,
@@ -10,12 +11,7 @@ pub const MemStats = struct {
 
 /// Reads memory stats from /proc/meminfo.
 pub fn read(allocator: std.mem.Allocator, io: std.Io) !MemStats {
-    const file = try std.Io.Dir.openFileAbsolute(io, "/proc/meminfo", .{});
-    defer file.close(io);
-
-    var file_buf: [64 * 1024]u8 = undefined;
-    var file_reader = file.reader(io, &file_buf);
-    const content = try file_reader.interface.allocRemaining(allocator, .unlimited);
+    const content = try procfs.readFile(allocator, io, "/proc/meminfo");
     defer allocator.free(content);
 
     var stats = MemStats{
